@@ -1,46 +1,34 @@
-from sys import argv as args
-import requests
-import json
+from urllib import request
+from sys import argv
 import os
+import json
 
-"""
-Checks the resolution of a post image.
-"""
-def check_post(post, resolution, limit):
-	if 'filename' not in post.keys() or limit not in ['max', 'min', 'equal']  and post['ext'] != 'jpg':
-		return False
+def check_image(resolution, operator):
+	"""Creates a function to validate the image resolution."""
+	return eval('lambda r: r %s resolution' % operator)
 
-	results = {
-		'equal': (post['w'], post['h']) == resolution,
-		'max'  : post['w'] <= resolution[0] and post['h'] <= resolution[1],
-		'min'  : post['w'] >= resolution[0] and post['h'] >= resolution[1]
-	}
+board, resolution, operator, directory = argv[1:] + [''] * 4
+image_filter = check_image(tuple(map(int, resolution.split('x'))), operator)
 
-	return results[limit]
+if not os.path.exists(directory):
+	os.makedirs(directory)
 
-configs = {
-	'resolution': tuple(map(int, args[2].split('x'))),
-	'limit'     : args[3],
-	'folder'    : (args[4] if args[4].endswith('/') else args[4] + '/') + '%s',
-	'api_urls'  : 'https://a.4cdn.org/%s/' % args[1]
-}
-
-if not os.path.exists(configs['folder'][:-2]):
-	os.makedirs(configs['folder'][:-2])
-
-pages   = json.loads(requests.get(configs['api_urls'] + 'threads.json').text)
+req = request.urlopen('https://a.4cdn.org/%s/threads.json' % board)
+pages = json.loads(req.read().decode())
 threads = [thread['no'] for threads in pages for thread in threads['threads']]
 images_saved = 0
 
 for thread in threads:
-	posts = json.loads(requests.get(configs['api_urls'] + 'thread/%d.json' % thread).text)['posts']
+	req = request.urlopen('https://a.4cdn.org/{}/thread/{}.json'.format(board, thread))
+	posts = json.loads(req.read().decode())
+	filenames = [str(post['tim']) + post['ext'] for post in posts['posts'] if 'w' in post and image_filter((post['w'], post['h']))]
 
-	for post in filter(lambda post: check_post(post, configs['resolution'], configs['limit']), posts):
-		filename = str(post['tim']) + post['ext']
+	for filename in filenames:
+		req = request.urlopen('https://i.4cdn.org/{}/{}'.format(board, filename))
 
-		with open(configs['folder'] % filename, 'wb') as file:
-			file.write(requests.get('https://i.4cdn.org/%s/%s' % (args[1], filename)).content)
+		with open(os.path.join(directory, filename), 'wb') as file:
+			file.write(req.read())
 
-		images_saved += 1
+	images_saved += len(filenames)
 
-print('Found %d wallpapers on /%s/!' % (images_saved, args[1]))
+print('Found {} wallpapers on /{}/!'.format(images_saved, board))
