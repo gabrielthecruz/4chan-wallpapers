@@ -105,21 +105,23 @@ for thread_id in threads:
         api_url.format('a', args.board, 'thread/{}.json'.format(thread_id)),
         logger)
 
-    if res is None:
+    try:
+        posts = json.load(res)
+    except AttributeError:
         continue
 
-    posts = json.load(res)
     filenames = map(lambda p: get_filename(p, args.filter, args.resolution),
                     posts['posts'])
 
     for filename in filter(bool, filenames):
         res = get_response(api_url.format('i', args.board, filename), logger)
+        image = open(os.path.join(args.destination, filename), 'wb')
 
-        if res is None:
+        try:
+            image.write(res.read())
+        except AttributeError:
             continue
 
-        image = open(os.path.join(args.destination, filename), 'wb')
-        image.write(res.read())
         image.close()
 
         logger.info('Arquivo {!r} baixado'.format(filename))
